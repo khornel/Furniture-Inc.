@@ -8,3 +8,4 @@ Implement proper error handling
 Check sub folders of Furniture folder to avoid filename collision from different furniture packages
 Manual furniture name collision avoidance
 Expand to enable roomsegment and fence modding
+Might need to change when/how furniture is loaded to enable adding custom behaviors from other mods
