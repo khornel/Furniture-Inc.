@@ -1,0 +1,86 @@
+<Root Base="Table" Thumbnail="Thumbs.png">
+	<Models>
+		<Model>
+			<File>FunnyTable.obj</File>
+			<Position>0,0,0</Position>
+			<Rotation>0,0,0</Rotation>
+			<Scale>2,1,2</Scale>
+		</Model>
+	</Models>
+	<BoxCollider>
+		<center>0,0.25,0</center>
+		<size>2,0.5,2</size>
+	</BoxCollider>
+	<SnapPoints>
+		<Point>
+			<Name>OnTable</Name>
+			<Position>-0.5,0.63,0</Position>
+			<Rotation>0,270,0</Rotation>
+			<Links>4</Links><!-- Make AtTable belong to this OnTable, needed for computer and food use(use comma seperation for several links) -->
+		</Point>
+		<Point>
+			<Name>OnTable</Name>
+			<Position>0.5,0.63,0</Position>
+			<Rotation>0,90,0</Rotation>
+			<Links>5</Links>
+		</Point>
+		<Point>
+			<Name>OnTable</Name>
+			<Position>0,0.63,-0.5</Position>
+			<Rotation>0,180,0</Rotation>
+			<Links>6</Links>
+		</Point>
+		<Point>
+			<Name>OnTable</Name>
+			<Position>0,0.63,0.5</Position>
+			<Rotation>0,0,0</Rotation>
+			<Links>7</Links>
+		</Point>
+		<Point>
+			<Name>AtTable</Name>
+			<Position>-1.2,0,0</Position>
+			<Rotation>0,90,0</Rotation>
+		</Point>
+		<Point>
+			<Name>AtTable</Name>
+			<Position>1.2,0,0</Position>
+			<Rotation>0,270,0</Rotation>
+		</Point>
+		<Point>
+			<Name>AtTable</Name>
+			<Position>0,0,-1.2</Position>
+			<Rotation>0,0,0</Rotation>
+		</Point>
+		<Point>
+			<Name>AtTable</Name>
+			<Position>0,0,1.2</Position>
+			<Rotation>0,180,0</Rotation>
+		</Point>
+	</SnapPoints>
+	<Furniture>
+		<Cost>99999</Cost>
+		<OnYEdge>True</OnYEdge><!-- Offsets furniture on grid when building, useful for even number sized furniture -->
+		<OnXEdge>True</OnXEdge>
+		<ButtonDescription>This is a weird table</ButtonDescription>
+		<ColorPrimaryDefault>0,0,1,1</ColorPrimaryDefault>
+		<ColorSecondaryDefault>0,1,0,1</ColorSecondaryDefault>
+		<ColorSecondaryEnabled>True</ColorSecondaryEnabled>
+		<!-- Inset a bit to make sure it can be placed against walls and stuff -->
+		<BuildBoundary>
+0.99,0.99
+-0.99,0.99
+-0.99,-0.99
+0.99,-0.99
+</BuildBoundary><!-- Add indents to make space for employees to reach chairs,  COUNTER CLOCKWISE ORDER IS IMPORTANT! -->
+		<NavBoundary>
+0.9,0
+1,1
+0,0.9
+-1,1
+-0.9,0
+-1,-1
+0,-0.9
+1,-1
+</NavBoundary>
+	</Furniture>
+</Root>
