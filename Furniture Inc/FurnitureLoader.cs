@@ -10,50 +10,116 @@ namespace Furniture_Inc
     {
     public class FurnitureLoader : ModBehaviour
         {
+        public bool ShouldLoad = false;
         public bool Loaded = false;
+        public bool HasStarted = false;
         public string Status = "Not loaded";
 
         public override void OnDeactivate()
             {
-            //Nothing to do as we can't delete furniture after it's been added
+            //Unfortunately we can't delete furniture after it's been added, so we can't unload mod at runtime
+            ShouldLoad = false;
+            }
+
+        //Load after all other mods to ensure their scripts are loaded in case we need them for furniture
+        void Start()
+            {
+            LoadFurniture();
+            HasStarted = true;
             }
 
         public override void OnActivate()
             {
-            //Should not load files twice in same session
-            if (!Loaded)
+            ShouldLoad = true;
+            //If mod wasn't activated on launch, load it now
+            if (HasStarted)
                 {
-                Status = "Loaded";
+                LoadFurniture();
+                }
+            }
+
+        private void LoadFurniture()
+            {
+            if (!Loaded && ShouldLoad)
+                {
+                Status = "Loaded\nLog:\n";
+                //Should not load files twice in same session
                 Loaded = true;
-                foreach (var file in Directory.GetFiles("DLLMods/Furniture", "*.xml"))
+                if (!Directory.Exists("DLLMods/Furniture"))
                     {
-                    var newFurn = CreateFurnitureObject(Path.GetFileNameWithoutExtension(file), XMLParser.ParseXML(File.ReadAllText(file)));
-                    //Deactivate prefab and save it
-                    newFurn.SetActive(false);
-                    DontDestroyOnLoad(newFurn);
-                    ObjectDatabase.Instance.AddFurniture(newFurn);
-                    //Update status in options window
-                    Status += "\n" + Path.GetFileName(file);
+                    Directory.CreateDirectory("DLLMods/Furniture");
+                    }
+                else
+                    {
+                    var sb = new StringBuilder();
+                    var success = true;
+                    foreach (var dir in Directory.GetDirectories("DLLMods/Furniture"))
+                        {
+                        foreach (var file in Directory.GetFiles(dir, "*.xml"))
+                            {
+                            sb.AppendLine(Path.GetFileName(dir) + "/" + Path.GetFileName(file));
+                            var newFurn = CreateFurnitureObject(Path.GetFileNameWithoutExtension(file), XMLParser.ParseXML(File.ReadAllText(file)), dir, sb, out success);
+                            if (success)
+                                {
+                                //Deactivate prefab and save it
+                                newFurn.SetActive(false);
+                                DontDestroyOnLoad(newFurn);
+                                ObjectDatabase.Instance.AddFurniture(newFurn);
+                                sb.AppendLine("\tLoaded succesfuly");
+                                }
+                            else
+                                {
+                                Destroy(newFurn);
+                                sb.AppendLine("\tFailed loading");
+                                }
+                            //Update status in options window
+                            sb.AppendLine();
+                            Status += sb.ToString();
+                            sb.Clear();
+                            }
+                        }
                     }
                 }
             }
 
-        public GameObject CreateFurnitureObject(string furnName, XMLParser.XMLNode root)
+        public string FindUniqueFurnitureName(string input)
+            {
+            var current = 1;
+            var result = input;
+            while (ObjectDatabase.Instance.GetFurniture(input) != null)
+                {
+                result = input + " " + current;
+                current++;
+                }
+            return result;
+            }
+
+        public GameObject CreateFurnitureObject(string furnName, XMLParser.XMLNode root, string rootFolder, StringBuilder output, out bool success)
             {
             GameObject go;
             var existing = root.TryGetAttribute("Base");
             Furniture furn;
             if (existing != null)
                 {
-                go = Instantiate(ObjectDatabase.Instance.GetFurniture(existing));
-                //Remove existing renderers
-                foreach (var child in go.GetComponentsInChildren<Renderer>())
+                var xFurn = ObjectDatabase.Instance.GetFurniture(existing);
+                if (xFurn != null)
                     {
-                    child.transform.SetParent(null);
-                    Destroy(child.gameObject);
+                    go = Instantiate(xFurn);
+                    //Remove existing renderers
+                    foreach (var child in go.GetComponentsInChildren<Renderer>())
+                        {
+                        child.transform.SetParent(null);
+                        Destroy(child.gameObject);
+                        }
+                    furn = go.GetComponent<Furniture>();
+                    furn.Colorable.Clear();
                     }
-                furn = go.GetComponent<Furniture>();
-                furn.Colorable.Clear();
+                else
+                    {
+                    output.AppendLine("\tFailed loading furniture " + existing + " using default");
+                    go = new GameObject();
+                    furn = go.AddComponent<Furniture>();
+                    }
                 }
             else
                 {
@@ -63,9 +129,9 @@ namespace Furniture_Inc
             //Since this mod only uses standard material, optimize using mesh combine
             furn.UseStandardMat = true;
             //Furniture are identified by their MonoBehavior names (Really dumb, I know)
-            go.name = furnName;
+            go.name = FindUniqueFurnitureName(furnName);
             var thumb = new Texture2D(128, 128);
-            thumb.LoadImage(File.ReadAllBytes(Path.Combine("DLLMods/Furniture", root.GetAttribute("Thumbnail"))));
+            thumb.LoadImage(File.ReadAllBytes(Path.Combine(rootFolder, root.GetAttribute("Thumbnail"))));
             furn.Thumbnail = Sprite.Create(thumb, new Rect(0, 0, 128, 128), Vector2.zero);
             foreach (var node in root.Children)
                 {
@@ -73,94 +139,137 @@ namespace Furniture_Inc
                     {
                     foreach (var model in node.Children)
                         {
-                        //Load obj model using script from Unity Wiki
-                        var m = ObjImporter.ImportFile(Path.Combine("DLLMods/Furniture", model.GetNodeValue("File")));
-                        var newMesh = new GameObject("SubMesh");
-                        newMesh.AddComponent<MeshFilter>().sharedMesh = m;
-                        var rend = newMesh.AddComponent<MeshRenderer>();
-                        rend.material = ObjectDatabase.Instance.DefaultFurnitureMaterial;
-                        //Make sure the mesh has outline when highlighted
-                        newMesh.tag = "Highlight";
-                        newMesh.transform.SetParent(go.transform);
-                        newMesh.transform.localPosition = SVector3.Deserialize(model.GetNodeValue("Position"));
-                        newMesh.transform.localRotation = Quaternion.Euler(SVector3.Deserialize(model.GetNodeValue("Rotation")));
-                        newMesh.transform.localScale = SVector3.Deserialize(model.GetNodeValue("Scale"));
-                        //Make sure mesh gets colored when player changes colors
-                        furn.Colorable.Add(rend);
+                        try
+                            {
+                            //Load obj model using script from Unity Wiki
+                            var m = ObjImporter.ImportFile(Path.Combine(rootFolder, model.GetNodeValue("File")));
+                            var newMesh = new GameObject("SubMesh");
+                            newMesh.AddComponent<MeshFilter>().sharedMesh = m;
+                            var rend = newMesh.AddComponent<MeshRenderer>();
+                            rend.material = ObjectDatabase.Instance.DefaultFurnitureMaterial;
+                            //Make sure the mesh has outline when highlighted
+                            newMesh.tag = "Highlight";
+                            newMesh.transform.SetParent(go.transform);
+                            newMesh.transform.localPosition = SVector3.Deserialize(model.GetNodeValue("Position"));
+                            newMesh.transform.localRotation = Quaternion.Euler(SVector3.Deserialize(model.GetNodeValue("Rotation")));
+                            newMesh.transform.localScale = SVector3.Deserialize(model.GetNodeValue("Scale"));
+                            //Make sure mesh gets colored when player changes colors
+                            furn.Colorable.Add(rend);
+                            }
+                        catch (Exception ex)
+                            {
+                            var fName = GetNodeValue(model, "File", "Undefined");
+                            output.AppendLine("\tFailed loading mesh " + fName + " with error:");
+                            output.AppendLine("\t" + ex.Message);
+                            success = false;
+                            return go;
+                            }
                         }
                     continue;
                     }
                 if (node.Name.Equals("InteractionPoints"))
                     {
-                    for (var i = 0; i < furn.InteractionPoints.Length; i++)
+                    try
                         {
-                        Destroy(furn.InteractionPoints[i].gameObject);
-                        }
-                    var newIps = new List<InteractionPoint>();
-                    var links = new int[node.Children.Count];
-                    var k = 0;
-                    foreach (var ip in node.Children)
-                        {
-                        var ipGo = new GameObject("InteractionPoint");
-                        ipGo.transform.SetParent(go.transform);
-                        var ipC = ipGo.AddComponent<InteractionPoint>();
-                        ipC.transform.localPosition = SVector3.Deserialize(ip.GetNodeValue("Position"));
-                        ipC.transform.localRotation = Quaternion.Euler(SVector3.Deserialize(ip.GetNodeValue("Rotation")));
-                        ipC.Name = ip.GetNodeValue("Name");
-                        ipC.Animation = GetNodeValue(ip, "Animation", 0);
-                        ipC.subAnimation = GetNodeValue(ip, "SubAnimation", 0);
-                        ipC.MinimumNeeded = GetNodeValue(ip, "MinimumNeeded", 1);
-                        ipC.NeedsReachCheck = GetNodeValue(ip, "ReachCheck", true);
-                        ipC.Parent = furn;
-                        links[k] = GetNodeValue(ip, "Child", -1);
-                        newIps.Add(ipC);
-                        k++;
-                        }
-                    furn.InteractionPoints = newIps.ToArray();
-                    for (var i = 0; i < furn.InteractionPoints.Length; i++)
-                        {
-                        if (links[i] > -1)
+                        for (var i = 0; i < furn.InteractionPoints.Length; i++)
                             {
-                            furn.InteractionPoints[i].Child = furn.InteractionPoints[links[i]];
+                            Destroy(furn.InteractionPoints[i].gameObject);
                             }
-                        furn.InteractionPoints[i].Id = i;
+                        var newIps = new List<InteractionPoint>();
+                        var links = new int[node.Children.Count];
+                        var k = 0;
+                        foreach (var ip in node.Children)
+                            {
+                            var ipGo = new GameObject("InteractionPoint");
+                            ipGo.transform.SetParent(go.transform);
+                            var ipC = ipGo.AddComponent<InteractionPoint>();
+                            ipC.transform.localPosition = SVector3.Deserialize(ip.GetNodeValue("Position"));
+                            ipC.transform.localRotation = Quaternion.Euler(SVector3.Deserialize(ip.GetNodeValue("Rotation")));
+                            ipC.Name = ip.GetNodeValue("Name");
+                            ipC.Animation = GetNodeValue(ip, "Animation", 0);
+                            ipC.subAnimation = GetNodeValue(ip, "SubAnimation", 0);
+                            ipC.MinimumNeeded = GetNodeValue(ip, "MinimumNeeded", 1);
+                            ipC.NeedsReachCheck = GetNodeValue(ip, "ReachCheck", true);
+                            ipC.Parent = furn;
+                            links[k] = GetNodeValue(ip, "Child", -1);
+                            newIps.Add(ipC);
+                            k++;
+                            }
+                        furn.InteractionPoints = newIps.ToArray();
+                        for (var i = 0; i < furn.InteractionPoints.Length; i++)
+                            {
+                            if (links[i] > -1)
+                                {
+                                furn.InteractionPoints[i].Child = furn.InteractionPoints[links[i]];
+                                }
+                            furn.InteractionPoints[i].Id = i;
+                            }
+                        }
+                    catch (Exception ex)
+                        {
+                        output.AppendLine("\tFailed loading interaction points with error:");
+                        output.AppendLine("\t" + ex.Message);
+                        success = false;
+                        return go;
                         }
                     continue;
                     }
                 if (node.Name.Equals("SnapPoints"))
                     {
-                    for (var i = 0; i < furn.SnapPoints.Length; i++)
+                    try
                         {
-                        Destroy(furn.SnapPoints[i].gameObject);
+                        for (var i = 0; i < furn.SnapPoints.Length; i++)
+                            {
+                            Destroy(furn.SnapPoints[i].gameObject);
+                            }
+                        var newSnaps = new List<SnapPoint>();
+                        var links = new int[node.Children.Count][];
+                        var k = 0;
+                        foreach (var snap in node.Children)
+                            {
+                            var snapGo = new GameObject("SnapPoint");
+                            snapGo.transform.SetParent(go.transform);
+                            var snapC = snapGo.AddComponent<SnapPoint>();
+                            snapC.transform.localPosition = SVector3.Deserialize(snap.GetNodeValue("Position"));
+                            snapC.transform.localRotation = Quaternion.Euler(SVector3.Deserialize(snap.GetNodeValue("Rotation")));
+                            snapC.Name = snap.GetNodeValue("Name");
+                            snapC.CheckValid = GetNodeValue(snap, "CheckValid", true);
+                            snapC.Parent = furn;
+                            var n = snap.GetNode("Links", false);
+                            links[k] = n != null ? n.Value.Split(',').Select(x => Convert.ToInt32(x)).ToArray() : new int[0];
+                            newSnaps.Add(snapC);
+                            k++;
+                            }
+                        furn.SnapPoints = newSnaps.ToArray();
+                        for (var i = 0; i < furn.SnapPoints.Length; i++)
+                            {
+                            furn.SnapPoints[i].InitLinks = links[i].Select(x => furn.SnapPoints[x]).ToArray();
+                            furn.SnapPoints[i].Id = i;
+                            }
                         }
-                    var newSnaps = new List<SnapPoint>();
-                    var links = new int[node.Children.Count][];
-                    var k = 0;
-                    foreach (var snap in node.Children)
+                    catch (Exception ex)
                         {
-                        var snapGo = new GameObject("SnapPoint");
-                        snapGo.transform.SetParent(go.transform);
-                        var snapC = snapGo.AddComponent<SnapPoint>();
-                        snapC.transform.localPosition = SVector3.Deserialize(snap.GetNodeValue("Position"));
-                        snapC.transform.localRotation = Quaternion.Euler(SVector3.Deserialize(snap.GetNodeValue("Rotation")));
-                        snapC.Name = snap.GetNodeValue("Name");
-                        snapC.CheckValid = GetNodeValue(snap, "CheckValid", true);
-                        snapC.Parent = furn;
-                        var n = snap.GetNode("Links", false);
-                        links[k] = n != null ? n.Value.Split(',').Select(x => Convert.ToInt32(x)).ToArray() : new int[0];
-                        newSnaps.Add(snapC);
-                        k++;
-                        }
-                    furn.SnapPoints = newSnaps.ToArray();
-                    for (var i = 0; i < furn.SnapPoints.Length; i++)
-                        {
-                        furn.SnapPoints[i].InitLinks = links[i].Select(x => furn.SnapPoints[x]).ToArray();
-                        furn.SnapPoints[i].Id = i;
+                        output.AppendLine("\tFailed loading snap points with error:");
+                        output.AppendLine("\t" + ex.Message);
+                        success = false;
+                        return go;
                         }
                     continue;
                     }
                 //Use reflection and string->type converters to create components and modify them
-                var t = Type.GetType(node.Name) ?? Type.GetType(node.Name + ", Assembly-CSharp") ?? Type.GetType("UnityEngine." + node.Name + ", UnityEngine");
+
+                //These need to be set if we're loading scripts from another mod, otherwise try defaults
+                var nameSpace = node.TryGetAttribute("Namespace");
+                var assembly = node.TryGetAttribute("Assembly");
+                Type t;
+                if (nameSpace != null && assembly != null)
+                    {
+                    t = Type.GetType(nameSpace + node.Name + ", " + assembly);
+                    }
+                else
+                    {
+                    t = Type.GetType(node.Name) ?? Type.GetType(node.Name + ", Assembly-CSharp") ?? Type.GetType("UnityEngine." + node.Name + ", UnityEngine");
+                    }
                 if (t != null)
                     {
                     var comp = go.GetComponent(t) ?? go.AddComponent(t);
@@ -171,20 +280,48 @@ namespace Furniture_Inc
                             var field = t.GetField(element.Name);
                             if (field != null)
                                 {
-                                var val = ConvertValue(field.FieldType, element.Value);
-                                field.SetValue(comp, val);
+                                try
+                                    {
+                                    var val = ConvertValue(field.FieldType, element.Value);
+                                    field.SetValue(comp, val);
+                                    }
+                                catch (Exception ex)
+                                    {
+                                    output.AppendLine("\tFailed setting field " + element.Name + ":");
+                                    output.AppendLine("\t" + ex.Message);
+                                    }
                                 }
                             else
                                 {
                                 var prop = t.GetProperty(element.Name);
                                 if (prop != null)
                                     {
-                                    var val = ConvertValue(prop.PropertyType, element.Value);
-                                    prop.SetValue(comp, val, null);
+                                    try
+                                        {
+                                        var val = ConvertValue(prop.PropertyType, element.Value);
+                                        prop.SetValue(comp, val, null);
+                                        }
+                                    catch (Exception ex)
+                                        {
+                                        output.AppendLine("\tFailed setting property " + element.Name + ":");
+                                        output.AppendLine("\t" + ex.Message);
+                                        }
+                                    }
+                                else
+                                    {
+                                    output.AppendLine("\tUndefined variable " + element.Name);
                                     }
                                 }
                             }
                         }
+                    else
+                        {
+                        output.AppendLine("\tCouldn't create type " + node.Name);
+                        }
+                    }
+                else
+                    {
+                    output.AppendLine("\tUndefined type " + node.Name);
                     }
                 }
             //If needed, project vertices to floor, convex hull and set as boundary to avoid wall clipping
@@ -192,6 +329,7 @@ namespace Furniture_Inc
                 {
                 furn.MeshBoundary = furn.CalculateBoundary().ToArray();
                 }
+            success = true;
             return go;
             }
 

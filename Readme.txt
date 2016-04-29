@@ -1,11 +1,14 @@
 ﻿How to install:
-Put mod in DLLMods folder with Software Inc.
-Put furniture XML in DLLMods/Furniture folder with .obj and .png files
+Put "Furniture Inc.dll" in DLLMods folder with Software Inc.
+Put all furniture xml, obj and png files in a subfolder under DLLMods/Furniture
 
 TODO:
-Add important info to the status log in the options menu
-Implement proper error handling
+Expand to enable roomsegment and fence modding
+
+Done:
+Add version number manually
 Check sub folders of Furniture folder to avoid filename collision from different furniture packages
 Manual furniture name collision avoidance
-Expand to enable roomsegment and fence modding
+Add important info to the status log in the options menu
+Implement proper error handling
 Might need to change when/how furniture is loaded to enable adding custom behaviors from other mods
