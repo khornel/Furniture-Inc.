@@ -1,6 +1,8 @@
 ﻿How to install:
-Put "Furniture Inc.dll" in DLLMods folder with Software Inc.
-Put all furniture xml, obj and png files in a subfolder under DLLMods/Furniture
+Put "Furniture Inc.dll" in "DLLMods" folder with Software Inc.
+Put all furniture xml, obj and png files in a subfolder under "DLLMods/Furniture/"
+
+You can find references to UnityEngine.dll, UnityEngineUI.dll and Assembly-CSharp.dll in the Software Inc. install folder under "/Software Inc_Data/Managed/"
 
 TODO:
 Expand to enable roomsegment and fence modding
