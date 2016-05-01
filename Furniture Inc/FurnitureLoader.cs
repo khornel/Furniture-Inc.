@@ -3,8 +3,11 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
+using DevConsole;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace Furniture_Inc
     {
@@ -18,105 +21,152 @@ namespace Furniture_Inc
         public override void OnDeactivate()
             {
             //Unfortunately we can't delete furniture after it's been added, so we can't unload mod at runtime
+            try
+                {
+                DevConsole.Console.RemoveCommand("FORCE_RELOAD_FURNITURE");
+                }
+            catch (Exception)
+                {
+                //Alpha 8.10.12 might have a null reference for disabled console singleton
+                }
             ShouldLoad = false;
             }
 
         //Load after all other mods to ensure their scripts are loaded in case we need them for furniture
         void Start()
             {
-            LoadFurniture();
+            if (!Loaded && ShouldLoad)
+                {
+                LoadFurniture();
+                }
             HasStarted = true;
             }
 
         public override void OnActivate()
             {
             ShouldLoad = true;
+            try
+                {
+                DevConsole.Console.AddCommand(new Command("FORCE_RELOAD_FURNITURE", ReLoadFurniture));
+                }
+            catch (Exception)
+                {
+                }
+            
             //If mod wasn't activated on launch, load it now
-            if (HasStarted)
+            if (HasStarted && !Loaded && ShouldLoad)
                 {
                 LoadFurniture();
                 }
             }
 
-        private void LoadFurniture()
+        private void ReLoadFurniture()
             {
-            if (!Loaded && ShouldLoad)
+            var furns = LoadFurniture();
+            if (HUD.Instance != null)
                 {
-                Status = "Loaded\nLog:\n";
-                //Should not load files twice in same session
-                Loaded = true;
-                if (!Directory.Exists("DLLMods/Furniture"))
+                foreach (var furn in furns.Select(x => x.GetComponent<Furniture>()))
                     {
-                    Directory.CreateDirectory("DLLMods/Furniture");
+                    var loc = Localization.GetFurniture(furn.name, furn.ButtonDescription);
+                    var buyButton = Instantiate(HUD.Instance.BuyButtonPrefab) as GameObject;
+                    buyButton.transform.SetParent(HUD.Instance.BuildButtonPanel.transform, false);
+                    var desc = new BuildDescriptor(BuildDescriptor.BuildType.Furniture,
+                        furn.Category, furn.Category.LocTry() + furn.Type.LocTry() + loc[0], furn);
+                    var button = buyButton.GetComponent<Button>();
+                    var localFurn = furn;
+                    var gbutton = buyButton.GetComponent<BuildButton>();
+                    gbutton.furn = furn;
+                    gbutton.ButtonImage.sprite = furn.Thumbnail;
+                    button.onClick.AddListener(() =>
+                    {
+                        BuildController.Instance.BeginBuildFurniture(localFurn.gameObject);
+                    });
+                    var bButton = typeof(HUD).GetField("BuildButtons", BindingFlags.NonPublic | BindingFlags.Instance);
+                    var buttons = (Dictionary<Button, BuildDescriptor>)bButton.GetValue(HUD.Instance);
+                    buttons.Add(button, desc);
                     }
-                else
+                }
+            }
+
+        private List<GameObject> LoadFurniture()
+            {
+            var result = new List<GameObject>();
+            Status = "Loaded\nLog:\n";
+            //Should not load files twice in same session
+            Loaded = true;
+            if (!Directory.Exists("DLLMods/Furniture"))
+                {
+                Directory.CreateDirectory("DLLMods/Furniture");
+                }
+            else
+                {
+                var sb = new StringBuilder();
+                var success = true;
+                foreach (var dir in Directory.GetDirectories("DLLMods/Furniture"))
                     {
-                    var sb = new StringBuilder();
-                    var success = true;
-                    foreach (var dir in Directory.GetDirectories("DLLMods/Furniture"))
+                    foreach (var file in Directory.GetFiles(dir, "*.xml"))
                         {
-                        foreach (var file in Directory.GetFiles(dir, "*.xml"))
+                        sb.AppendLine(Path.GetFileName(dir) + "/" + Path.GetFileName(file));
+                        var failedLoading = false;
+                        var content = "";
+                        XMLParser.XMLNode root = null;
+                        try
                             {
-                            sb.AppendLine(Path.GetFileName(dir) + "/" + Path.GetFileName(file));
-                            var failedLoading = false;
-                            var content = "";
-                            XMLParser.XMLNode root = null;
+                            content = File.ReadAllText(file);
+                            }
+                        catch (Exception ex)
+                            {
+                            sb.AppendLine("\tFailed reading file");
+                            sb.AppendLine("\t" + ex.ToString());
+                            failedLoading = true;
+                            }
+                        if (!failedLoading)
+                            {
                             try
                                 {
-                                content = File.ReadAllText(file);
+                                root = XMLParser.ParseXML(content);
                                 }
                             catch (Exception ex)
                                 {
-                                sb.AppendLine("\tFailed reading file");
+                                sb.AppendLine("\tFailed parsing xml");
                                 sb.AppendLine("\t" + ex.ToString());
                                 failedLoading = true;
                                 }
-                            if (!failedLoading)
-                                {
-                                try
-                                    {
-                                    root = XMLParser.ParseXML(content);
-                                    }
-                                catch (Exception ex)
-                                    {
-                                    sb.AppendLine("\tFailed parsing xml");
-                                    sb.AppendLine("\t" + ex.ToString());
-                                    failedLoading = true;
-                                    }
-                                }
-                            GameObject newFurn = null;
-                            if (!failedLoading)
-                                {
-                                newFurn = CreateFurnitureObject(Path.GetFileNameWithoutExtension(file), root, dir, sb, out success);
-                                }
-                            else
-                                {
-                                success = false;
-                                }
-                            if (success)
-                                {
-                                //Deactivate prefab and save it
-                                newFurn.SetActive(false);
-                                DontDestroyOnLoad(newFurn);
-                                ObjectDatabase.Instance.AddFurniture(newFurn);
-                                sb.AppendLine("\tLoaded succesfuly");
-                                }
-                            else
-                                {
-                                if (newFurn != null)
-                                    {
-                                    Destroy(newFurn);
-                                    }
-                                sb.AppendLine("\tFailed loading");
-                                }
-                            //Update status in options window
-                            sb.AppendLine();
-                            Status += sb.ToString();
-                            sb.Clear();
                             }
+                        GameObject newFurn = null;
+                        if (!failedLoading)
+                            {
+                            newFurn = CreateFurnitureObject(Path.GetFileNameWithoutExtension(file), root, dir, sb, out success);
+                            }
+                        else
+                            {
+                            success = false;
+                            }
+                        if (success)
+                            {
+                            //Deactivate prefab and save it
+                            newFurn.SetActive(false);
+                            DontDestroyOnLoad(newFurn);
+                            ObjectDatabase.Instance.AddFurniture(newFurn);
+                            result.Add(newFurn);
+                            sb.AppendLine("\tLoaded succesfuly");
+                            }
+                        else
+                            {
+                            if (newFurn != null)
+                                {
+                                Destroy(newFurn);
+                                }
+                            sb.AppendLine("\tFailed loading");
+                            }
+                        //Update status in options window
+                        sb.AppendLine();
+                        Status += sb.ToString();
+                        sb.Clear();
                         }
                     }
                 }
+            return result;
             }
 
         public string FindUniqueFurnitureName(string input)
