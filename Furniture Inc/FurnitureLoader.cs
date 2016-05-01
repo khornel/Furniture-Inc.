@@ -58,7 +58,41 @@ namespace Furniture_Inc
                         foreach (var file in Directory.GetFiles(dir, "*.xml"))
                             {
                             sb.AppendLine(Path.GetFileName(dir) + "/" + Path.GetFileName(file));
-                            var newFurn = CreateFurnitureObject(Path.GetFileNameWithoutExtension(file), XMLParser.ParseXML(File.ReadAllText(file)), dir, sb, out success);
+                            var failedLoading = false;
+                            var content = "";
+                            XMLParser.XMLNode root = null;
+                            try
+                                {
+                                content = File.ReadAllText(file);
+                                }
+                            catch (Exception ex)
+                                {
+                                sb.AppendLine("\tFailed reading file");
+                                sb.AppendLine("\t" + ex.ToString());
+                                failedLoading = true;
+                                }
+                            if (!failedLoading)
+                                {
+                                try
+                                    {
+                                    root = XMLParser.ParseXML(content);
+                                    }
+                                catch (Exception ex)
+                                    {
+                                    sb.AppendLine("\tFailed parsing xml");
+                                    sb.AppendLine("\t" + ex.ToString());
+                                    failedLoading = true;
+                                    }
+                                }
+                            GameObject newFurn = null;
+                            if (!failedLoading)
+                                {
+                                newFurn = CreateFurnitureObject(Path.GetFileNameWithoutExtension(file), root, dir, sb, out success);
+                                }
+                            else
+                                {
+                                success = false;
+                                }
                             if (success)
                                 {
                                 //Deactivate prefab and save it
@@ -69,7 +103,10 @@ namespace Furniture_Inc
                                 }
                             else
                                 {
-                                Destroy(newFurn);
+                                if (newFurn != null)
+                                    {
+                                    Destroy(newFurn);
+                                    }
                                 sb.AppendLine("\tFailed loading");
                                 }
                             //Update status in options window
@@ -86,7 +123,7 @@ namespace Furniture_Inc
             {
             var current = 1;
             var result = input;
-            while (ObjectDatabase.Instance.GetFurniture(input) != null)
+            while (ObjectDatabase.Instance.GetFurniture(result) != null)
                 {
                 result = input + " " + current;
                 current++;
@@ -323,6 +360,12 @@ namespace Furniture_Inc
                     {
                     output.AppendLine("\tUndefined type " + node.Name);
                     }
+                }
+            if (furn.Colorable.Count == 0)
+                {
+                output.AppendLine("\tFurniture needs at least one mesh");
+                success = false;
+                return go;
                 }
             //If needed, project vertices to floor, convex hull and set as boundary to avoid wall clipping
             if (!furn.WallFurn && furn.BuildBoundary != null && furn.BuildBoundary.Length > 0)

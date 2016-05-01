@@ -9,7 +9,7 @@ namespace Furniture_Inc
     {
     public class FurnMeta : ModMeta
         {
-        public static int Version = 2;
+        public static int Version = 3;
         public Text InfoText;
 
         public void ConstructOptionsScreen(RectTransform parent, ModBehaviour[] behaviours)
@@ -21,7 +21,7 @@ namespace Furniture_Inc
             InfoText = WindowManager.SpawnLabel();
             var status = InfoText.gameObject.AddComponent<ModStatusText>();
             status.Loader = behaviours.OfType<FurnitureLoader>().First();
-            WindowManager.AddElementToElement(InfoText.gameObject, parent.gameObject, new Rect(2, 48, 256, 512), new Rect(0, 0, 0, 0));
+            WindowManager.AddElementToElement(InfoText.gameObject, parent.gameObject, new Rect(2, 48, 512, 512), new Rect(0, 0, 0, 0));
             }
 
         public string Name

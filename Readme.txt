@@ -2,12 +2,13 @@
 Put "Furniture Inc.dll" in "DLLMods" folder with Software Inc.
 Put all furniture xml, obj and png files in a subfolder under "DLLMods/Furniture/"
 
-You can find references to UnityEngine.dll, UnityEngineUI.dll and Assembly-CSharp.dll in the Software Inc. install folder under "/Software Inc_Data/Managed/"
+You can find references to UnityEngine.dll, UnityEngine.UI.dll and Assembly-CSharp.dll in the Software Inc. install folder under "/Software Inc_Data/Managed/"
 
 TODO:
 Expand to enable roomsegment and fence modding
 
 Done:
+Handle errors when reading file and parsing xml
 Add version number manually
 Check sub folders of Furniture folder to avoid filename collision from different furniture packages
 Manual furniture name collision avoidance
