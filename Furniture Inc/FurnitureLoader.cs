@@ -170,10 +170,14 @@ namespace Furniture_Inc
             var thumb = new Texture2D(128, 128);
             thumb.LoadImage(File.ReadAllBytes(Path.Combine(rootFolder, root.GetAttribute("Thumbnail"))));
             furn.Thumbnail = Sprite.Create(thumb, new Rect(0, 0, 128, 128), Vector2.zero);
+            GameObject compTrans = null;
+            GameObject[] models = null;
             foreach (var node in root.Children)
                 {
                 if (node.Name.Equals("Models"))
                     {
+                    models = new GameObject[node.Children.Count];
+                    var i = 0;
                     foreach (var model in node.Children)
                         {
                         try
@@ -182,11 +186,17 @@ namespace Furniture_Inc
                             var m = ObjImporter.ImportFile(Path.Combine(rootFolder, model.GetNodeValue("File")));
                             var newMesh = new GameObject("SubMesh");
                             newMesh.AddComponent<MeshFilter>().sharedMesh = m;
+                            models[i] = newMesh;
                             var rend = newMesh.AddComponent<MeshRenderer>();
                             rend.material = ObjectDatabase.Instance.DefaultFurnitureMaterial;
+                            if (Convert.ToBoolean(GetNodeValue(model, "Computer", "False")))
+                                {
+                                compTrans = newMesh;
+                                }
                             //Make sure the mesh has outline when highlighted
                             newMesh.tag = "Highlight";
-                            newMesh.transform.SetParent(go.transform);
+                            var parent = Convert.ToInt32(GetNodeValue(model, "Parent", "-1"));
+                            newMesh.transform.SetParent(parent >= 0 ? models[parent].transform : go.transform);
                             newMesh.transform.localPosition = SVector3.Deserialize(model.GetNodeValue("Position"));
                             newMesh.transform.localRotation = Quaternion.Euler(SVector3.Deserialize(model.GetNodeValue("Rotation")));
                             newMesh.transform.localScale = SVector3.Deserialize(model.GetNodeValue("Scale"));
@@ -201,6 +211,7 @@ namespace Furniture_Inc
                             success = false;
                             return go;
                             }
+                        i++;
                         }
                     continue;
                     }
@@ -265,7 +276,15 @@ namespace Furniture_Inc
                         foreach (var snap in node.Children)
                             {
                             var snapGo = new GameObject("SnapPoint");
-                            snapGo.transform.SetParent(go.transform);
+                            if (models != null)
+                                {
+                                var parent = Convert.ToInt32(GetNodeValue(snap, "MeshParent", "-1"));
+                                snapGo.transform.SetParent(parent >= 0 ? models[parent].transform : go.transform);
+                                }
+                            else
+                                {
+                                snapGo.transform.SetParent(go.transform);
+                                }
                             var snapC = snapGo.AddComponent<SnapPoint>();
                             snapC.transform.localPosition = SVector3.Deserialize(snap.GetNodeValue("Position"));
                             snapC.transform.localRotation = Quaternion.Euler(SVector3.Deserialize(snap.GetNodeValue("Rotation")));
@@ -309,51 +328,62 @@ namespace Furniture_Inc
                     }
                 if (t != null)
                     {
-                    var comp = go.GetComponent(t) ?? go.AddComponent(t);
-                    if (comp != null)
+                    if (node.TryGetAttribute("Destroy") != null)
                         {
-                        foreach (var element in node.Children)
+                        var comp = go.GetComponent(t);
+                        if (comp != null)
                             {
-                            var field = t.GetField(element.Name);
-                            if (field != null)
+                            DestroyImmediate(comp);
+                            }
+                        }
+                    else
+                        {
+                        var comp = go.GetComponent(t) ?? go.AddComponent(t);
+                        if (comp != null)
+                            {
+                            foreach (var element in node.Children)
                                 {
-                                try
-                                    {
-                                    var val = ConvertValue(field.FieldType, element.Value);
-                                    field.SetValue(comp, val);
-                                    }
-                                catch (Exception ex)
-                                    {
-                                    output.AppendLine("\tFailed setting field " + element.Name + ":");
-                                    output.AppendLine("\t" + ex.Message);
-                                    }
-                                }
-                            else
-                                {
-                                var prop = t.GetProperty(element.Name);
-                                if (prop != null)
+                                var field = t.GetField(element.Name);
+                                if (field != null)
                                     {
                                     try
                                         {
-                                        var val = ConvertValue(prop.PropertyType, element.Value);
-                                        prop.SetValue(comp, val, null);
+                                        var val = ConvertValue(field.FieldType, element.Value);
+                                        field.SetValue(comp, val);
                                         }
                                     catch (Exception ex)
                                         {
-                                        output.AppendLine("\tFailed setting property " + element.Name + ":");
+                                        output.AppendLine("\tFailed setting field " + element.Name + ":");
                                         output.AppendLine("\t" + ex.Message);
                                         }
                                     }
                                 else
                                     {
-                                    output.AppendLine("\tUndefined variable " + element.Name);
+                                    var prop = t.GetProperty(element.Name);
+                                    if (prop != null)
+                                        {
+                                        try
+                                            {
+                                            var val = ConvertValue(prop.PropertyType, element.Value);
+                                            prop.SetValue(comp, val, null);
+                                            }
+                                        catch (Exception ex)
+                                            {
+                                            output.AppendLine("\tFailed setting property " + element.Name + ":");
+                                            output.AppendLine("\t" + ex.Message);
+                                            }
+                                        }
+                                    else
+                                        {
+                                        output.AppendLine("\tUndefined variable " + element.Name);
+                                        }
                                     }
                                 }
                             }
-                        }
-                    else
-                        {
-                        output.AppendLine("\tCouldn't create type " + node.Name);
+                        else
+                            {
+                            output.AppendLine("\tCouldn't create type " + node.Name);
+                            }
                         }
                     }
                 else
@@ -372,6 +402,9 @@ namespace Furniture_Inc
                 {
                 furn.MeshBoundary = furn.CalculateBoundary().ToArray();
                 }
+            furn.ComputerTransform = compTrans == null ? null : compTrans.transform;
+            furn.upg = go.GetComponent<Upgradable>();
+            furn.Table = go.GetComponent<TableScript>();
             success = true;
             return go;
             }

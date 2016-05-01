@@ -9,7 +9,7 @@ namespace Furniture_Inc
     {
     public class FurnMeta : ModMeta
         {
-        public static int Version = 3;
+        public static int Version = 4;
         public Text InfoText;
 
         public void ConstructOptionsScreen(RectTransform parent, ModBehaviour[] behaviours)
