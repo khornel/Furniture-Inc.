@@ -1,13 +1,12 @@
-﻿How to install:
+﻿DEPRECATED:
+This mod has been added to the game and is no longer being updated 
+
+
+How to install:
 Put "Furniture Inc.dll" in "DLLMods" folder with Software Inc.
 Put all furniture xml, obj and png files in a subfolder under "DLLMods/Furniture/"
 
 You can find references to UnityEngine.dll, UnityEngine.UI.dll and Assembly-CSharp.dll in the Software Inc. install folder under "/Software Inc_Data/Managed/"
-
-TODO:
-Cache meshes and thumbnails
-Expand to enable roomsegment and fence modding
-
 
 Done:
 Ability to remove components in XML file

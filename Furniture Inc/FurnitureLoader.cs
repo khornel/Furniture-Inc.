@@ -51,8 +51,9 @@ namespace Furniture_Inc
                 }
             catch (Exception)
                 {
+                //Alpha 8.10.12 might have a null reference for disabled console singleton
                 }
-            
+
             //If mod wasn't activated on launch, load it now
             if (HasStarted && !Loaded && ShouldLoad)
                 {
@@ -65,25 +66,28 @@ namespace Furniture_Inc
             var furns = LoadFurniture();
             if (HUD.Instance != null)
                 {
-                foreach (var furn in furns.Select(x => x.GetComponent<Furniture>()))
+                var bButton = typeof(HUD).GetField("BuildButtons", BindingFlags.NonPublic | BindingFlags.Instance);
+                if (bButton != null)
                     {
-                    var loc = Localization.GetFurniture(furn.name, furn.ButtonDescription);
-                    var buyButton = Instantiate(HUD.Instance.BuyButtonPrefab) as GameObject;
-                    buyButton.transform.SetParent(HUD.Instance.BuildButtonPanel.transform, false);
-                    var desc = new BuildDescriptor(BuildDescriptor.BuildType.Furniture,
-                        furn.Category, furn.Category.LocTry() + furn.Type.LocTry() + loc[0], furn);
-                    var button = buyButton.GetComponent<Button>();
-                    var localFurn = furn;
-                    var gbutton = buyButton.GetComponent<BuildButton>();
-                    gbutton.furn = furn;
-                    gbutton.ButtonImage.sprite = furn.Thumbnail;
-                    button.onClick.AddListener(() =>
-                    {
-                        BuildController.Instance.BeginBuildFurniture(localFurn.gameObject);
-                    });
-                    var bButton = typeof(HUD).GetField("BuildButtons", BindingFlags.NonPublic | BindingFlags.Instance);
                     var buttons = (Dictionary<Button, BuildDescriptor>)bButton.GetValue(HUD.Instance);
-                    buttons.Add(button, desc);
+                    foreach (var furn in furns.Select(x => x.GetComponent<Furniture>()))
+                        {
+                        var loc = Localization.GetFurniture(furn.name, furn.ButtonDescription);
+                        var buyButton = Instantiate(HUD.Instance.BuyButtonPrefab);
+                        buyButton.transform.SetParent(HUD.Instance.BuildButtonPanel.transform, false);
+                        var desc = new BuildDescriptor(BuildDescriptor.BuildType.Furniture,
+                            furn.Category, furn.Category.LocTry() + furn.Type.LocTry() + loc[0], furn);
+                        var button = buyButton.GetComponent<Button>();
+                        var localFurn = furn;
+                        var gbutton = buyButton.GetComponent<BuildButton>();
+                        gbutton.furn = furn;
+                        gbutton.ButtonImage.sprite = furn.Thumbnail;
+                        button.onClick.AddListener(() =>
+                            {
+                            BuildController.Instance.BeginBuildFurniture(localFurn.gameObject);
+                            });
+                        buttons.Add(button, desc);
+                        }
                     }
                 }
             }
@@ -101,7 +105,6 @@ namespace Furniture_Inc
             else
                 {
                 var sb = new StringBuilder();
-                var success = true;
                 foreach (var dir in Directory.GetDirectories("DLLMods/Furniture"))
                     {
                     foreach (var file in Directory.GetFiles(dir, "*.xml"))
@@ -117,7 +120,7 @@ namespace Furniture_Inc
                         catch (Exception ex)
                             {
                             sb.AppendLine("\tFailed reading file");
-                            sb.AppendLine("\t" + ex.ToString());
+                            sb.AppendLine("\t" + ex);
                             failedLoading = true;
                             }
                         if (!failedLoading)
@@ -129,11 +132,12 @@ namespace Furniture_Inc
                             catch (Exception ex)
                                 {
                                 sb.AppendLine("\tFailed parsing xml");
-                                sb.AppendLine("\t" + ex.ToString());
+                                sb.AppendLine("\t" + ex);
                                 failedLoading = true;
                                 }
                             }
                         GameObject newFurn = null;
+                        bool success;
                         if (!failedLoading)
                             {
                             newFurn = CreateFurnitureObject(Path.GetFileNameWithoutExtension(file), root, dir, sb, out success);
@@ -459,9 +463,9 @@ namespace Furniture_Inc
             return go;
             }
 
-        private T GetNodeValue<T>(XMLParser.XMLNode node, string name, T def)
+        private static T GetNodeValue<T>(XMLParser.XMLNode node, string subName, T def)
             {
-            var n = node.GetNode(name, false);
+            var n = node.GetNode(subName, false);
             if (n != null)
                 {
                 return (T)TypeDescriptor.GetConverter(typeof(T)).ConvertFrom(n.Value);
@@ -469,7 +473,7 @@ namespace Furniture_Inc
             return def;
             }
 
-        private object ConvertValue(Type type, string value)
+        private static object ConvertValue(Type type, string value)
             {
             if (type.IsArray)
                 {
